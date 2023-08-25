@@ -1,4 +1,4 @@
-"""Library for interacting with DJI Ryze Tello drones.
+"""Library for interacting with DJI Ryze railenPy drones.
 """
 
 # coding=utf-8
@@ -20,25 +20,25 @@ drones: Optional[dict] = {}
 client_socket: socket.socket
 
 
-class TelloException(Exception):
+class railenPyException(Exception):
     pass
 
 
 @enforce_types
-class Tello:
-    """Python wrapper to interact with the Ryze Tello drone using the official Tello api.
-    Tello API documentation:
-    [1.3](https://dl-cdn.ryzerobotics.com/downloads/tello/20180910/Tello%20SDK%20Documentation%20EN_1.3.pdf),
-    [2.0 with EDU-only commands](https://dl-cdn.ryzerobotics.com/downloads/Tello/Tello%20SDK%202.0%20User%20Guide.pdf)
+class railenPy:
+    """Python wrapper to interact with the Ryze railenPy drone using the official railenPy api.
+    railenPy API documentation:
+    [1.3](https://dl-cdn.ryzerobotics.com/downloads/railenPy/20180910/railenPy%20SDK%20Documentation%20EN_1.3.pdf),
+    [2.0 with EDU-only commands](https://dl-cdn.ryzerobotics.com/downloads/railenPy/railenPy%20SDK%202.0%20User%20Guide.pdf)
     """
     # Send and receive commands, client socket
-    RESPONSE_TIMEOUT = 7  # in seconds
-    TAKEOFF_TIMEOUT = 20  # in seconds
-    FRAME_GRAB_TIMEOUT = 5
+    RESPONSE_TIMEOUT = 3  # in seconds
+    TAKEOFF_TIMEOUT = 3  # in seconds
+    FRAME_GRAB_TIMEOUT = 3
     TIME_BTW_COMMANDS = 0.1  # in seconds
     TIME_BTW_RC_CONTROL_COMMANDS = 0.001  # in seconds
     RETRY_COUNT = 3  # number of retries after a failed command
-    TELLO_IP = '192.168.10.1'  # Tello IP address
+    railenPy_IP = '192.168.10.1'  # railenPy IP address
 
     # Video stream, server socket
     VS_UDP_IP = '0.0.0.0'
@@ -67,15 +67,15 @@ class Tello:
     FORMATTER = logging.Formatter('[%(levelname)s] %(filename)s - %(lineno)d - %(message)s')
     HANDLER.setFormatter(FORMATTER)
 
-    LOGGER = logging.getLogger('djitellopy')
+    LOGGER = logging.getLogger('djirailenPypy')
     LOGGER.addHandler(HANDLER)
     LOGGER.setLevel(logging.INFO)
-    # Use Tello.LOGGER.setLevel(logging.<LEVEL>) in YOUR CODE
+    # Use railenPy.LOGGER.setLevel(logging.<LEVEL>) in YOUR CODE
     # to only receive logs of the desired level and higher
 
     # Conversion functions for state protocol fields
     INT_STATE_FIELDS = (
-        # Tello EDU with mission pads enabled only
+        # railenPy EDU with mission pads enabled only
         'mid', 'x', 'y', 'z',
         # 'mpry': (custom format 'x,y,z')
         # Common entries
@@ -97,28 +97,28 @@ class Tello:
     is_flying = False
 
     def __init__(self,
-                 host=TELLO_IP,
+                 host=railenPy_IP,
                  retry_count=RETRY_COUNT,
                  vs_udp=VS_UDP_PORT):
 
         global threads_initialized, client_socket, drones
 
-        self.address = (host, Tello.CONTROL_UDP_PORT)
+        self.address = (host, railenPy.CONTROL_UDP_PORT)
         self.stream_on = False
         self.retry_count = retry_count
         self.last_received_command_timestamp = time.time()
         self.last_rc_control_timestamp = time.time()
 
         if not threads_initialized:
-            # Run Tello command responses UDP receiver on background
+            # Run railenPy command responses UDP receiver on background
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            client_socket.bind(("", Tello.CONTROL_UDP_PORT))
-            response_receiver_thread = Thread(target=Tello.udp_response_receiver)
+            client_socket.bind(("", railenPy.CONTROL_UDP_PORT))
+            response_receiver_thread = Thread(target=railenPy.udp_response_receiver)
             response_receiver_thread.daemon = True
             response_receiver_thread.start()
 
             # Run state UDP receiver on background
-            state_receiver_thread = Thread(target=Tello.udp_state_receiver)
+            state_receiver_thread = Thread(target=railenPy.udp_state_receiver)
             state_receiver_thread.daemon = True
             state_receiver_thread.start()
 
@@ -126,7 +126,7 @@ class Tello:
 
         drones[host] = {'responses': [], 'state': {}}
 
-        self.LOGGER.info("Tello instance was initialized. Host: '{}'. Port: '{}'.".format(host, Tello.CONTROL_UDP_PORT))
+        self.LOGGER.info("railenPy instance was initialized. Host: '{}'. Port: '{}'.".format(host, railenPy.CONTROL_UDP_PORT))
 
         self.vs_udp_port = vs_udp
 
@@ -149,7 +149,7 @@ class Tello:
 
     @staticmethod
     def udp_response_receiver():
-        """Setup drone UDP receiver. This method listens for responses of Tello.
+        """Setup drone UDP receiver. This method listens for responses of railenPy.
         Must be run from a background thread in order to not block the main thread.
         Internal method, you normally wouldn't call this yourself.
         """
@@ -158,7 +158,7 @@ class Tello:
                 data, address = client_socket.recvfrom(1024)
 
                 address = address[0]
-                Tello.LOGGER.debug('Data received from {} at client_socket'.format(address))
+                railenPy.LOGGER.debug('Data received from {} at client_socket'.format(address))
 
                 if address not in drones:
                     continue
@@ -166,34 +166,34 @@ class Tello:
                 drones[address]['responses'].append(data)
 
             except Exception as e:
-                Tello.LOGGER.error(e)
+                railenPy.LOGGER.error(e)
                 break
 
     @staticmethod
     def udp_state_receiver():
         """Setup state UDP receiver. This method listens for state information from
-        Tello. Must be run from a background thread in order to not block
+        railenPy. Must be run from a background thread in order to not block
         the main thread.
         Internal method, you normally wouldn't call this yourself.
         """
         state_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        state_socket.bind(("", Tello.STATE_UDP_PORT))
+        state_socket.bind(("", railenPy.STATE_UDP_PORT))
 
         while True:
             try:
                 data, address = state_socket.recvfrom(1024)
 
                 address = address[0]
-                Tello.LOGGER.debug('Data received from {} at state_socket'.format(address))
+                railenPy.LOGGER.debug('Data received from {} at state_socket'.format(address))
 
                 if address not in drones:
                     continue
 
                 data = data.decode('ASCII')
-                drones[address]['state'] = Tello.parse_state(data)
+                drones[address]['state'] = railenPy.parse_state(data)
 
             except Exception as e:
-                Tello.LOGGER.error(e)
+                railenPy.LOGGER.error(e)
                 break
 
     @staticmethod
@@ -202,7 +202,7 @@ class Tello:
         Internal method, you normally wouldn't call this yourself.
         """
         state = state.strip()
-        Tello.LOGGER.debug('Raw state data: {}'.format(state))
+        railenPy.LOGGER.debug('Raw state data: {}'.format(state))
 
         if state == 'ok':
             return {}
@@ -216,14 +216,14 @@ class Tello:
             key = split[0]
             value: Union[int, float, str] = split[1]
 
-            if key in Tello.state_field_converters:
-                num_type = Tello.state_field_converters[key]
+            if key in railenPy.state_field_converters:
+                num_type = railenPy.state_field_converters[key]
                 try:
                     value = num_type(value)
                 except ValueError as e:
-                    Tello.LOGGER.debug('Error parsing state value for {}: {} to {}'
+                    railenPy.LOGGER.debug('Error parsing state value for {}: {} to {}'
                                        .format(key, value, num_type))
-                    Tello.LOGGER.error(e)
+                    railenPy.LOGGER.error(e)
                     continue
 
             state_dict[key] = value
@@ -231,7 +231,7 @@ class Tello:
         return state_dict
 
     def get_current_state(self) -> dict:
-        """Call this function to attain the state of the Tello. Returns a dict
+        """Call this function to attain the state of the railenPy. Returns a dict
         with all fields.
         Internal method, you normally wouldn't call this yourself.
         """
@@ -246,11 +246,11 @@ class Tello:
         if key in state:
             return state[key]
         else:
-            raise TelloException('Could not get state property: {}'.format(key))
+            raise railenPyException('Could not get state property: {}'.format(key))
 
     def get_mission_pad_id(self) -> int:
         """Mission pad ID of the currently detected mission pad
-        Only available on Tello EDUs after calling enable_mission_pads
+        Only available on railenPy EDUs after calling enable_mission_pads
         Returns:
             int: -1 if none is detected, else 1-8
         """
@@ -258,7 +258,7 @@ class Tello:
 
     def get_mission_pad_distance_x(self) -> int:
         """X distance to current mission pad
-        Only available on Tello EDUs after calling enable_mission_pads
+        Only available on railenPy EDUs after calling enable_mission_pads
         Returns:
             int: distance in cm
         """
@@ -266,7 +266,7 @@ class Tello:
 
     def get_mission_pad_distance_y(self) -> int:
         """Y distance to current mission pad
-        Only available on Tello EDUs after calling enable_mission_pads
+        Only available on railenPy EDUs after calling enable_mission_pads
         Returns:
             int: distance in cm
         """
@@ -274,7 +274,7 @@ class Tello:
 
     def get_mission_pad_distance_z(self) -> int:
         """Z distance to current mission pad
-        Only available on Tello EDUs after calling enable_mission_pads
+        Only available on railenPy EDUs after calling enable_mission_pads
         Returns:
             int: distance in cm
         """
@@ -423,7 +423,7 @@ class Tello:
         return self.background_frame_read
 
     def send_command_with_return(self, command: str, timeout: int = RESPONSE_TIMEOUT) -> str:
-        """Send command to Tello and wait for its response.
+        """Send command to railenPy and wait for its response.
         Internal method, you normally wouldn't call this yourself.
         Return:
             bool/str: str with response text on success, False when unsuccessfull.
@@ -463,7 +463,7 @@ class Tello:
         return response
 
     def send_command_without_return(self, command: str):
-        """Send command to Tello without expecting a response.
+        """Send command to railenPy without expecting a response.
         Internal method, you normally wouldn't call this yourself.
         """
         # Commands very consecutive makes the drone not respond to them. So wait at least self.TIME_BTW_COMMANDS seconds
@@ -472,7 +472,7 @@ class Tello:
         client_socket.sendto(command.encode('utf-8'), self.address)
 
     def send_control_command(self, command: str, timeout: int = RESPONSE_TIMEOUT) -> bool:
-        """Send control command to Tello and wait for its response.
+        """Send control command to railenPy and wait for its response.
         Internal method, you normally wouldn't call this yourself.
         """
         response = "max retries exceeded"
@@ -488,7 +488,7 @@ class Tello:
         return False # never reached
 
     def send_read_command(self, command: str) -> str:
-        """Send given command to Tello and wait for its response.
+        """Send given command to railenPy and wait for its response.
         Internal method, you normally wouldn't call this yourself.
         """
 
@@ -506,7 +506,7 @@ class Tello:
         return response
 
     def send_read_command_int(self, command: str) -> int:
-        """Send given command to Tello and wait for its response.
+        """Send given command to railenPy and wait for its response.
         Parses the response to an integer
         Internal method, you normally wouldn't call this yourself.
         """
@@ -514,7 +514,7 @@ class Tello:
         return int(response)
 
     def send_read_command_float(self, command: str) -> float:
-        """Send given command to Tello and wait for its response.
+        """Send given command to railenPy and wait for its response.
         Parses the response to an integer
         Internal method, you normally wouldn't call this yourself.
         """
@@ -526,7 +526,7 @@ class Tello:
         Internal method, you normally wouldn't call this yourself.
         """
         tries = 1 + self.retry_count
-        raise TelloException("Command '{}' was unsuccessful for {} tries. Latest response:\t'{}'"
+        raise railenPyException("Command '{}' was unsuccessful for {} tries. Latest response:\t'{}'"
                              .format(command, tries, response))
 
     def connect(self, wait_for_state=True):
@@ -539,12 +539,12 @@ class Tello:
             for i in range(REPS):
                 if self.get_current_state():
                     t = i / REPS  # in seconds
-                    Tello.LOGGER.debug("'.connect()' received first state packet after {} seconds".format(t))
+                    railenPy.LOGGER.debug("'.connect()' received first state packet after {} seconds".format(t))
                     break
                 time.sleep(1 / REPS)
 
             if not self.get_current_state():
-                raise TelloException('Did not receive a state packet from the Tello')
+                raise railenPyException('Did not receive a state packet from the railenPy')
 
     def send_keepalive(self):
         """Send a keepalive packet to prevent the drone from landing after 15s
@@ -572,7 +572,7 @@ class Tello:
         """
         # Something it takes a looooot of time to take off and return a succesful takeoff.
         # So we better wait. Otherwise, it would give us an error on the following calls.
-        self.send_control_command("takeoff", timeout=Tello.TAKEOFF_TIMEOUT)
+        self.send_control_command("takeoff", timeout=railenPy.TAKEOFF_TIMEOUT)
         self.is_flying = True
 
     def land(self):
@@ -582,15 +582,15 @@ class Tello:
         self.is_flying = False
 
     def streamon(self):
-        """Turn on video streaming. Use `tello.get_frame_read` afterwards.
-        Video Streaming is supported on all tellos when in AP mode (i.e.
-        when your computer is connected to Tello-XXXXXX WiFi ntwork).
-        Currently Tello EDUs do not support video streaming while connected
+        """Turn on video streaming. Use `railenPy.get_frame_read` afterwards.
+        Video Streaming is supported on all railenPys when in AP mode (i.e.
+        when your computer is connected to railenPy-XXXXXX WiFi ntwork).
+        Currently railenPy EDUs do not support video streaming while connected
         to a WiFi-network.
 
         !!! Note:
-            If the response is 'Unknown command' you have to update the Tello
-            firmware. This can be done using the official Tello app.
+            If the response is 'Unknown command' you have to update the railenPy
+            firmware. This can be done using the official railenPy app.
         """
         self.send_control_command("streamon")
         self.stream_on = True
@@ -612,7 +612,7 @@ class Tello:
         self.is_flying = False
 
     def move(self, direction: str, x: int):
-        """Tello fly up, down, left, right, forward or back with distance x cm.
+        """railenPy fly up, down, left, right, forward or back with distance x cm.
         Users would normally call one of the move_x functions instead.
         Arguments:
             direction: up, down, left, right, forward or back
@@ -835,22 +835,22 @@ class Tello:
             self.send_command_without_return(cmd)
 
     def set_wifi_credentials(self, ssid: str, password: str):
-        """Set the Wi-Fi SSID and password. The Tello will reboot afterwords.
+        """Set the Wi-Fi SSID and password. The railenPy will reboot afterwords.
         """
         cmd = 'wifi {} {}'.format(ssid, password)
         self.send_control_command(cmd)
 
     def connect_to_wifi(self, ssid: str, password: str):
         """Connects to the Wi-Fi with SSID and password.
-        After this command the tello will reboot.
-        Only works with Tello EDUs.
+        After this command the railenPy will reboot.
+        Only works with railenPy EDUs.
         """
         cmd = 'ap {} {}'.format(ssid, password)
         self.send_control_command(cmd)
 
     def set_network_ports(self, state_packet_port: int, video_stream_port: int):
         """Sets the ports for state packets and video streaming
-        While you can use this command to reconfigure the Tello this library currently does not support
+        While you can use this command to reconfigure the railenPy this library currently does not support
         non-default ports (TODO!)
         """
         cmd = 'port {} {}'.format(state_packet_port, video_stream_port)
@@ -864,12 +864,12 @@ class Tello:
     def set_video_bitrate(self, bitrate: int):
         """Sets the bitrate of the video stream
         Use one of the following for the bitrate argument:
-            Tello.BITRATE_AUTO
-            Tello.BITRATE_1MBPS
-            Tello.BITRATE_2MBPS
-            Tello.BITRATE_3MBPS
-            Tello.BITRATE_4MBPS
-            Tello.BITRATE_5MBPS
+            railenPy.BITRATE_AUTO
+            railenPy.BITRATE_1MBPS
+            railenPy.BITRATE_2MBPS
+            railenPy.BITRATE_3MBPS
+            railenPy.BITRATE_4MBPS
+            railenPy.BITRATE_5MBPS
         """
         cmd = 'setbitrate {}'.format(bitrate)
         self.send_control_command(cmd)
@@ -877,8 +877,8 @@ class Tello:
     def set_video_resolution(self, resolution: str):
         """Sets the resolution of the video stream
         Use one of the following for the resolution argument:
-            Tello.RESOLUTION_480P
-            Tello.RESOLUTION_720P
+            railenPy.RESOLUTION_480P
+            railenPy.RESOLUTION_720P
         """
         cmd = 'setresolution {}'.format(resolution)
         self.send_control_command(cmd)
@@ -886,9 +886,9 @@ class Tello:
     def set_video_fps(self, fps: str):
         """Sets the frames per second of the video stream
         Use one of the following for the fps argument:
-            Tello.FPS_5
-            Tello.FPS_15
-            Tello.FPS_30
+            railenPy.FPS_5
+            railenPy.FPS_15
+            railenPy.FPS_30
         """
         cmd = 'setfps {}'.format(fps)
         self.send_control_command(cmd)
@@ -898,15 +898,15 @@ class Tello:
         The forward camera is the regular 1080x720 color camera
         The downward camera is a grey-only 320x240 IR-sensitive camera
         Use one of the following for the direction argument:
-            Tello.CAMERA_FORWARD
-            Tello.CAMERA_DOWNWARD
+            railenPy.CAMERA_FORWARD
+            railenPy.CAMERA_DOWNWARD
         """
         cmd = 'downvision {}'.format(direction)
         self.send_control_command(cmd)
 
     def send_expansion_command(self, expansion_cmd: str):
-        """Sends a command to the ESP32 expansion board connected to a Tello Talent
-        Use e.g. tello.send_expansion_command("led 255 0 0") to turn the top led red.
+        """Sends a command to the ESP32 expansion board connected to a railenPy Talent
+        Use e.g. railenPy.send_expansion_command("led 255 0 0") to turn the top led red.
         """
         cmd = 'EXT {}'.format(expansion_cmd)
         self.send_control_command(cmd)
@@ -957,7 +957,7 @@ class Tello:
             {'pitch': int, 'roll': int, 'yaw': int}
         """
         response = self.send_read_command('attitude?')
-        return Tello.parse_state(response)
+        return railenPy.parse_state(response)
 
     def query_barometer(self) -> int:
         """Get barometer value (cm)
@@ -1007,14 +1007,14 @@ class Tello:
         return self.send_read_command('active?')
 
     def end(self):
-        """Call this method when you want to end the tello object
+        """Call this method when you want to end the railenPy object
         """
         try:
             if self.is_flying:
                 self.land()
             if self.stream_on:
                 self.streamoff()
-        except TelloException:
+        except railenPyException:
             pass
 
         if self.background_frame_read is not None:
@@ -1034,7 +1034,7 @@ class BackgroundFrameRead:
     backgroundFrameRead.frame to get the current frame.
     """
 
-    def __init__(self, tello, address, with_queue = False, maxsize = 32):
+    def __init__(self, railenPy, address, with_queue = False, maxsize = 32):
         self.address = address
         self.lock = Lock()
         self.frame = np.zeros([300, 400, 3], dtype=np.uint8)
@@ -1043,12 +1043,12 @@ class BackgroundFrameRead:
 
         # Try grabbing frame with PyAV
         # According to issue #90 the decoder might need some time
-        # https://github.com/damiafuentes/DJITelloPy/issues/90#issuecomment-855458905
+        # https://github.com/damiafuentes/DJIrailenPyPy/issues/90#issuecomment-855458905
         try:
-            Tello.LOGGER.debug('trying to grab video frames...')
-            self.container = av.open(self.address, timeout=(Tello.FRAME_GRAB_TIMEOUT, None))
+            railenPy.LOGGER.debug('trying to grab video frames...')
+            self.container = av.open(self.address, timeout=(railenPy.FRAME_GRAB_TIMEOUT, None))
         except av.error.ExitError:
-            raise TelloException('Failed to grab video frames from video stream')
+            raise railenPyException('Failed to grab video frames from video stream')
 
         self.stopped = False
         self.worker = Thread(target=self.update_frame, args=(), daemon=True)
@@ -1074,7 +1074,7 @@ class BackgroundFrameRead:
                     self.container.close()
                     break
         except av.error.ExitError:
-            raise TelloException('Do not have enough frames for decoding, please try again or increase video fps before get_frame_read()')
+            raise railenPyException('Do not have enough frames for decoding, please try again or increase video fps before get_frame_read()')
     
     def get_queued_frame(self):
         """
